@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Проверка наличия аргумента с IP-адресом
+# Проверка наличия аргумента
 if [ -z "$1" ]; then
   echo "Использование: $0 <IP-адрес>"
   exit 1
@@ -15,23 +15,37 @@ if [ ! -f "$NETPLAN_FILE" ]; then
   exit 1
 fi
 
-# Резервное копирование
+echo "Используется файл: $NETPLAN_FILE"
+
+# Резервная копия
 sudo cp "$NETPLAN_FILE" "${NETPLAN_FILE}.bak"
 echo "Создана резервная копия: ${NETPLAN_FILE}.bak"
 
-# Извлечение существующей конфигурации без enp0s8
-grep -v '^\s*enp0s8:' "$NETPLAN_FILE" | grep -v -A 10 '^\s*enp0s8:' > /tmp/netplan.tmp
+# Временный файл для новой конфигурации
+TMPFILE=$(mktemp)
 
-# Добавление нового блока для enp0s8
-cat <<EOF >> /tmp/netplan.tmp
+# Копируем содержимое оригинального файла, удаляя старый блок enp0s8 (если есть)
+grep -A 20 -B 20 '^\s*enp0s8:' "$NETPLAN_FILE" > /dev/null && \
+  grep -v -A 10 '^\s*enp0s8:' "$NETPLAN_FILE" | grep -v '^\s*enp0s8:' > "$TMPFILE" || \
+  cp "$NETPLAN_FILE" "$TMPFILE"
 
-enp0s8:
-  dhcp4: false
-  addresses: [$IPADDR/24]
+# Добавляем или обновляем enp0s8
+cat <<EOF >> "$TMPFILE"
+
+  enp0s8:
+    dhcp4: no
+    addresses: [$IPADDR/24]
 EOF
 
-# Перемещение временного файла обратно
-sudo mv /tmp/netplan.tmp "$NETPLAN_FILE"
+# Проверяем корректность форматирования
+if ! sudo netplan try --config="$TMPFILE"; then
+  echo "Ошибка в формате Netplan. Отмена изменений."
+  rm -f "$TMPFILE"
+  exit 1
+fi
+
+# Перемещаем временный файл обратно
+sudo mv "$TMPFILE" "$NETPLAN_FILE"
 
 echo "Обновлена конфигурация интерфейса enp0s8 с IP: $IPADDR"
 
@@ -54,5 +68,6 @@ sudo ufw allow ssh
 
 echo "✅ Настройка завершена!"
 echo "- Интерфейс enp0s8 настроен с IP $IPADDR"
+echo "- Интерфейс enp0s3 остался с DHCP"
 echo "- SSH установлен, запущен и добавлен в автозагрузку"
 echo "- Порт SSH разрешён в брандмауэре"
