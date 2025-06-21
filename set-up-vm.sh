@@ -26,7 +26,7 @@ grep -v '^\s*enp0s8:' "$NETPLAN_FILE" | grep -v -A 10 '^\s*enp0s8:' > /tmp/netpl
 cat <<EOF >> /tmp/netplan.tmp
 
 enp0s8:
-  dhcp4: no
+  dhcp4: false
   addresses: [$IPADDR/24]
 EOF
 
